@@ -1,20 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <uses-permission android:name="android.permission.RECEIVE_SMS" />
-    <uses-permission android:name="android.permission.READ_SMS" />
-    <uses-permission android:name="android.permi<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
     <!-- SMS ও নেটওয়ার্কের জন্য পারমিশন -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> <!-- ⚡ নতুন যোগ করা হয়েছে -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /> 
 
     <!-- ডুয়াল সিম ও ডিভাইস ইনফো পড়ার জন্য পারমিশন -->
     <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" /> <!-- ⚡ নতুন (Android 11+ এর জন্য) -->
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
 
     <!-- ব্যাকগ্রাউন্ডে সবসময় সচল থাকার জন্য পারমিশন -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
@@ -47,36 +42,5 @@
             </intent-filter>
         </receiver>
         
-    </application>
-</manifest>ssion.INTERNET" />
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-
-    <application
-        android:allowBackup="true"
-        android:icon="@drawable/otp"
-        android:label="OTP Support"
-        android:supportsRtl="true"
-        android:usesCleartextTraffic="true"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
-
-        <activity
-            android:name="com.ivac.otpsupport.MainActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
-        <receiver
-            android:name="com.ivac.otpsupport.SmsReceiver"
-            android:exported="true"
-            android:permission="android.permission.BROADCAST_SMS">
-            <intent-filter android:priority="999">
-                <action android:name="android.provider.Telephony.SMS_RECEIVED" />
-            </intent-filter>
-        </receiver>
     </application>
 </manifest>
