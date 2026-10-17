@@ -53,7 +53,7 @@ public class SmsReceiver extends BroadcastReceiver {
         String messageBody = fullMessage.toString();
         if (messageBody.isEmpty()) return;
 
-        // শুধুমাত্র IVAC মেসেজ ফিল্টার
+        // শুধুমাত্র IVAC মেসেজ ফিল্টার (যাতে অন্য কোনো ওটিপি সার্ভারে না যায়)
         String upperSender = sender.toUpperCase(Locale.ROOT);
         String upperBody = messageBody.toUpperCase(Locale.ROOT);
         if (!upperSender.contains("IVAC") && !upperBody.contains("IVAC")) {
@@ -63,32 +63,44 @@ public class SmsReceiver extends BroadcastReceiver {
         String extractedOtp = extractOtpFromText(messageBody);
         String finalMessageToSend = extractedOtp.isEmpty() ? messageBody : extractedOtp;
 
-        int slot = bundle.getInt("slot", -1);
-        if (slot == -1) slot = bundle.getInt("simSlot", -1);
-        if (slot == -1) slot = bundle.getInt("android.telephony.extra.SLOT_INDEX", -1);
-        if (slot == -1) slot = bundle.getInt("phone", -1);
+        // 🎯 ডুয়াল সিম ১০০% সেপারেট করার সুপার লজিক
+        int slotIndex = -1;
+        if (bundle.containsKey("android.telephony.extra.SLOT_INDEX")) {
+            slotIndex = bundle.getInt("android.telephony.extra.SLOT_INDEX", -1);
+        } else if (bundle.containsKey("slot")) {
+            slotIndex = bundle.getInt("slot", -1);
+        } else if (bundle.containsKey("simSlot")) {
+            slotIndex = bundle.getInt("simSlot", -1);
+        } else if (bundle.containsKey("phone")) {
+            slotIndex = bundle.getInt("phone", -1);
+        } else if (bundle.containsKey("subscription")) {
+            slotIndex = bundle.getInt("subscription", -1);
+        }
 
         String sim1 = prefs.getString("sim1_number", "").trim();
         String sim2 = prefs.getString("sim2_number", "").trim();
 
+        // ডিফল্ট হিসেবে টার্গেট ডিভাইস সিম ১-ই থাকবে, তবে স্লট ইনডেক্স ১ হলে (মানে ২য় সিম) টার্গেট ডিভাইস সিম ২ হবে।
         String targetDevice = sim1;
-        if (slot == 1 && !sim2.isEmpty()) {
+        if (slotIndex == 1 && !sim2.isEmpty()) {
             targetDevice = sim2;
         } else if (targetDevice.isEmpty() && !sim2.isEmpty()) {
-            targetDevice = sim2;
+            targetDevice = sim2; // যদি সিম ১ সেট করা না থাকে, কিন্তু সিম ২ থাকে
         }
 
         final String finalDevice = targetDevice.isEmpty() ? "default" : targetDevice;
         final String displayMsg = extractedOtp.isEmpty() ? messageBody : "OTP: " + extractedOtp + " (" + messageBody + ")";
 
+        // 🚀 WakeLock দিয়ে ফোনকে জাগিয়ে রেখে সাথে সাথে রিকোয়েস্ট পাঠানো
         final PendingResult pendingResult = goAsync();
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         final PowerManager.WakeLock wakeLock = pm != null ? pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "IVAC:OtpWakeLock") : null;
-        if (wakeLock != null) wakeLock.acquire(30000L);
+        if (wakeLock != null) wakeLock.acquire(10000L); // ১০ সেকেন্ডের জন্য লক
 
         new Thread(() -> {
             try {
-                boolean sent = sendToServerWithRetry(finalDevice, finalMessageToSend);
+                // ⚡ কোনো ডিলে ছাড়াই সরাসরি ফাস্ট রিকোয়েস্ট
+                boolean sent = sendToServerSuperFast(finalDevice, finalMessageToSend);
                 String statusTag = sent ? "[✅ Sent to PC]" : "[❌ Net Error]";
                 appendLog(context, finalDevice, statusTag + " " + displayMsg);
             } finally {
@@ -100,7 +112,7 @@ public class SmsReceiver extends BroadcastReceiver {
 
     public static void triggerManualTest(Context context, String device) {
         new Thread(() -> {
-            boolean sent = sendToServerWithRetry(device, "TEST_CONNECTION_OK");
+            boolean sent = sendToServerSuperFast(device, "TEST_CONNECTION_OK");
             String statusTag = sent ? "[✅ Server Connected!]" : "[❌ Server Failed!]";
             appendLog(context, device, statusTag + " Manual Test Ping");
         }).start();
@@ -150,8 +162,9 @@ public class SmsReceiver extends BroadcastReceiver {
         return "";
     }
 
-    private static boolean sendToServerWithRetry(String device, String message) {
-        for (int attempt = 1; attempt <= 3; attempt++) {
+    // 🚀 ডিলে বাদ দিয়ে ফাস্ট নেটওয়ার্ক রিকোয়েস্ট
+    private static boolean sendToServerSuperFast(String device, String message) {
+        for (int attempt = 1; attempt <= 2; attempt++) { // সর্বোচ্চ ২ বার চেষ্টা করবে
             HttpURLConnection conn = null;
             try {
                 String query = "device=" + URLEncoder.encode(device, "UTF-8") +
@@ -159,8 +172,8 @@ public class SmsReceiver extends BroadcastReceiver {
                 URL url = new URL(API_URL + "?" + query);
                 conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
-                conn.setConnectTimeout(8000);
-                conn.setReadTimeout(8000);
+                conn.setConnectTimeout(4000); // ⚡ কানেকশন স্পিড ৮ সেকেন্ড থেকে কমিয়ে ৪ সেকেন্ড করা হলো
+                conn.setReadTimeout(4000);
                 conn.setDoOutput(true);
                 conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
 
@@ -179,7 +192,7 @@ public class SmsReceiver extends BroadcastReceiver {
                 if (conn != null) conn.disconnect();
             }
             try {
-                Thread.sleep(1500); // নেট সমস্যা হলে ১.৫ সেকেন্ড পর আবার চেষ্টা করবে
+                if (attempt == 1) Thread.sleep(300); // ⚡ ১.৫ সেকেন্ডের ডিলে কমিয়ে মাত্র ৩০০ মিলিসেকেন্ড করা হলো
             } catch (InterruptedException ignored) {}
         }
         return false;
